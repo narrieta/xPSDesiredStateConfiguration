@@ -53,7 +53,7 @@ configuration Sample_xDscWebServiceRegistrationWithEnhancedSecurity
             DependsOn               = "[WindowsFeature]DSCServiceFeature" 
             RegistrationKeyPath     = "$env:PROGRAMFILES\WindowsPowerShell\DscService"   
             AcceptSelfSignedCertificates = $true
-            UseUpToDateSecuritySettings = $true
+            SecurityBestPractices = "All"
         }
 
         File RegistrationKeyFile

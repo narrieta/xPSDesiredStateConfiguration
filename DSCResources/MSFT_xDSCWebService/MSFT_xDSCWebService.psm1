@@ -2,7 +2,31 @@
 Import-Module $PSScriptRoot\PSWSIISEndpoint.psm1 -Verbose:$false
 Import-Module $PSScriptRoot\SChannel.psm1 -Verbose:$false
 
-# The Get-TargetResource cmdlet.
+<#
+   This function turns on strict mode and sets the error preference to Stop
+
+   NOTES:
+       * This should be done at the module level, but that can potentially break the existing code. Please invoke this function from any new functions.
+       * The caller must dot-source this function for it to have any effect.
+       * When calling existing code from a function in which strict mode has been enabled you may want to disable it first (you don't need to do this
+         if calling a function defined in another module)
+#>
+function Enable-StrictModeAndStopOnError
+{
+    param()
+
+    Set-StrictMode -Version latest
+    $ErrorActionPreference = 'stop'
+}
+
+<#
+   A list with all the security best practices that can be enabled/disabled 
+#>
+$script:AllSecurityBestPractices = @("SecureTLSProtocols")
+
+<#
+ The Get-TargetResource cmdlet.
+#>
 function Get-TargetResource
 {
     [OutputType([Hashtable])]
@@ -98,7 +122,7 @@ function Get-TargetResource
         Ensure                          = $Ensure
         RegistrationKeyPath             = $RegistrationKeyPath
         AcceptSelfSignedCertificates    = $AcceptSelfSignedCertificates
-        UseUpToDateSecuritySettings     = (SChannel\Test-EnhancedSecurity)
+        SecurityBestPractices           = Get-SecurityBestPractices
     }
 }
 
@@ -146,14 +170,20 @@ function Set-TargetResource
         # Add the IISSelfSignedCertModule native module to prevent self-signed certs being rejected.
         [boolean]$AcceptSelfSignedCertificates = $true,
 
-        # Use up to date secure protocol and cipher settings for schannel
-        [boolean]$UseUpToDateSecuritySettings
+        # Enable/disable security best practices
+        [Parameter(Mandatory)]
+        [ValidateSet("SecureTLSProtocols", "All")]
+        [AllowEmptyCollection()]
+        [string[]] $SecurityBestPractices
     )
 
+    # normalize $SecurityBestPractices
+    $SecurityBestPractices = Format-SecurityBestPractices
+
     # Check parameter values
-    if ($UseUpToDateSecuritySettings -and ($CertificateThumbPrint -eq "AllowUnencryptedTraffic"))
+    if (("SecureTLSProtocols" -in $SecurityBestPractices) -and ($CertificateThumbPrint -eq "AllowUnencryptedTraffic"))
     {
-        throw "Error: Cannot use up to date security settings with unencrypted traffic. Please set UseUpTodateSecuritySettings to `$false or use a certificate to encrypt pull server traffic."
+        throw "Error: Cannot use SecureTLSProtocols with unencrypted traffic. Please omit SecureTLSProtocols from SecurityBestPractices or use a certificate to encrypt pull server traffic."
         # No need to proceed any more
         return
     }
@@ -291,10 +321,7 @@ function Set-TargetResource
         }
     }
 
-    if($UseUpToDateSecuritySettings)
-    {
-        SChannel\Set-EnhancedSecurity
-    }
+    Set-SecurityBestPractices
 }
 
 # The Test-TargetResource cmdlet.
@@ -342,8 +369,11 @@ function Test-TargetResource
         # Are self-signed certs being accepted for client auth.
         [boolean]$AcceptSelfSignedCertificates,
 
-        # Is up to date secure protocol and cipher settings used for schannel
-        [boolean]$UseUpToDateSecuritySettings
+        # Enable/disable security best practices
+        [Parameter(Mandatory)]
+        [ValidateSet("SecureTLSProtocols", "All")]
+        [AllowEmptyCollection()]
+        [string[]] $SecurityBestPractices
     )
 
     $desiredConfigurationMatch = $true;
@@ -470,16 +500,11 @@ function Test-TargetResource
             }
         }
 
-        Write-Verbose "Check UseUpToDateSecuritySettings"
-        if ($UseUpToDateSecuritySettings)
+        if (-not (Test-SecurityBestPractices))
         {
-            if (-not (SChannel\Test-EnhancedSecurity))
-            {
-                $desiredConfigurationMatch = $false;
-                Write-Verbose "The state of SChannel security settings does not match the desired state."
-                break
-            }
+            $desiredConfigurationMatch = $false
         }
+
         $stop = $false
     }
     While($stop)  
@@ -665,5 +690,102 @@ function Update-LocationTagInApplicationHostConfigForAuthentication
     $appHostConfigSection.OverrideMode="Allow"
     $webAdminSrvMgr.CommitChanges()
 }
+
+<#
+    Returns an array containing the security best practices currently enabled; the value corresponds to the SecurityBestPractices proeprty of the resource.
+
+    NOTE: The function returns explicitly all the practices that are enabled; it never returns 'All', but instead the entire list of practices.
+#>
+function Get-SecurityBestPractices
+{
+    param()
+
+    . Enable-StrictModeAndStopOnError
+
+    $securityBestPractices = @()
+
+    if (SChannel\Test-EnhancedSecurity)
+    {
+        $securityBestPractices += 'SecureTLSProtocols'
+    }
+
+    return $securityBestPractices
+}
+
+<#
+    Enables the give security best practices.
+#>
+function Set-SecurityBestPractices
+{
+    param(
+        [Parameter(Mandatory)]
+        [string] $SecurityBestPractices
+    )
+
+    . Enable-StrictModeAndStopOnError
+
+    foreach ($practice in (Format-SecurityBestPractices $SecurityBestPractices)) {
+        'SecureTLSProtocols' {
+            SChannel\Set-EnhancedSecurity
+            break;
+        }
+
+        default {
+            throw New-Object System.NotImplementedException
+        }
+    }
+}
+
+<#
+    Returns true if all the given practices are enabled.
+#>
+function Test-SecurityBestPractices
+{
+    param(
+        [Parameter(Mandatory)]
+        [string] $SecurityBestPractices
+    )
+
+    . Enable-StrictModeAndStopOnError
+
+    Write-Verbose "Checking SecurityBestPractices"
+
+    $enabled = $true
+
+    foreach ($practice in (Format-SecurityBestPractices $SecurityBestPractices)) {
+        'SecureTLSProtocols' {
+            if (-not (SChannel\Test-EnhancedSecurity))
+            {
+                Write-Verbose "The state of SecureTLSProtocols  does not match the desired state."
+                $enabled = $false
+            }
+            break;
+        }
+
+        default {
+            throw New-Object System.NotImplementedException
+        }
+    }
+
+    return $enabled
+}
+
+<#
+    Normalizes the list of security best practices (expands 'All' to all value)
+#>
+function Format-SecurityBestPractices
+{
+    param(
+        [Parameter(Mandatory)]
+        [string] $SecurityBestPractices
+    )
+
+    if ("All" -in $SecurityBestPractices)
+    {
+        $SecurityBestPractices = $script:AllSecurityBestPractices
+    }
+
+    $SecurityBestPractices
+} 
 
 Export-ModuleMember -Function *-TargetResource

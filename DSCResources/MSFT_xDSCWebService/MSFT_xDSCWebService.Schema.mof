@@ -14,5 +14,11 @@ class MSFT_xDSCWebService : OMI_BaseResource
   [read] string DSCServerUrl;  
   [write] string RegistrationKeyPath;
   [write] boolean AcceptSelfSignedCertificates;
-  [write] boolean UseUpToDateSecuritySettings;
+  [
+    required, 
+    write, 
+    Description("This property can be used to select which security best practices should be enforced by the resource. The recommended value is All, which enforces all security best practices. Use an empty array to disable all best practices (this is not recommended)."),
+    ValueMap{"SecureTLSProtocols", "All"}, 
+    Values{"SecureTLSProtocols", "All"}
+  ] boolean SecurityBestPractices;
 };

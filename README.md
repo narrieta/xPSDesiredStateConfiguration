@@ -68,7 +68,7 @@ Resources that work on Nano Server:
 * **ConfigurationPath**: Folder location where DSC configurations are stored.
 * **RegistrationKeyPath**: Folder location where DSC pull server registration key file is stored.
 * **AcceptSelfSignedCertificate**: Whether self signed certificate can be used to setup pull server.
-* **UseUpToDateSecuritySettings**: Whether to use enhanced security settings for the node where pull server resides on.
+* **SecurityBestPractices**: The set of security best practices that should be enabled.
 
 ### xWindowsProcess
 
