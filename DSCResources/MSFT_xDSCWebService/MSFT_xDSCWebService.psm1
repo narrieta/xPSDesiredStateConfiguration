@@ -692,7 +692,7 @@ function Update-LocationTagInApplicationHostConfigForAuthentication
 }
 
 <#
-    Returns an array containing the security best practices currently enabled; the value corresponds to the SecurityBestPractices proeprty of the resource.
+    Returns an array containing the security best practices currently enabled; the value corresponds to the SecurityBestPractices property of the resource.
 
     NOTE: The function returns explicitly all the practices that are enabled; it never returns 'All', but instead the entire list of practices.
 #>
@@ -713,7 +713,7 @@ function Get-SecurityBestPractices
 }
 
 <#
-    Enables the give security best practices.
+    Enables the given security best practices.
 #>
 function Set-SecurityBestPractices
 {
@@ -753,17 +753,20 @@ function Test-SecurityBestPractices
     $enabled = $true
 
     foreach ($practice in (Format-SecurityBestPractices $SecurityBestPractices)) {
-        'SecureTLSProtocols' {
-            if (-not (SChannel\Test-EnhancedSecurity))
-            {
-                Write-Verbose "The state of SecureTLSProtocols  does not match the desired state."
-                $enabled = $false
+        switch ($practice)
+        {
+            'SecureTLSProtocols' {
+                if (-not (SChannel\Test-EnhancedSecurity))
+                {
+                    Write-Verbose "The state of SecureTLSProtocols  does not match the desired state."
+                    $enabled = $false
+                }
+                break;
             }
-            break;
-        }
 
-        default {
-            throw New-Object System.NotImplementedException
+            default {
+                throw New-Object System.NotImplementedException
+            }
         }
     }
 
